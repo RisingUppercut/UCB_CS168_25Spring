@@ -125,26 +125,43 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
     routers were found, the ith list can be empty.  If `ip` is discovered, it
     should be included as the final element in the list.
     """
-    # Code for A-stage1-----------begin
-    sendsock.set_ttl(30)
-    sendsock.sendto("Potato".encode(), (ip, TRACEROUTE_PORT_NUMBER))
-    if recvsock.recv_select():
-        buf, address = recvsock.recvfrom()
-        print(f"Packet bytes: {buf.hex()}")
-        ip1 = IPv4(buf)
-        icmp = ICMP(buf[ip1.header_len:])
-        ip2 = IPv4(buf[ip1.header_len + 8:])
-        udp = UDP(buf[ip1.header_len + 8 + ip2.header_len:])
-        print(ip1)
-        print(icmp)
-        print(ip2)
-        print(udp)
-    # Code for A-stage1-----------end
+    # Code for A-stage1,2-----------begin
+    # sendsock.set_ttl(TRACEROUTE_MAX_TTL)
+    # sendsock.sendto("Potato".encode(), (ip, TRACEROUTE_PORT_NUMBER))
+    # if recvsock.recv_select():
+    #     buf, address = recvsock.recvfrom()
+    #     print(f"Packet bytes: {buf.hex()}")
+    #     ip1 = IPv4(buf)
+    #     icmp = ICMP(buf[ip1.header_len:])
+    #     ip2 = IPv4(buf[ip1.header_len + 8:])
+    #     udp = UDP(buf[ip1.header_len + 8 + ip2.header_len:])
+    #     print(ip1)
+    #     print(icmp)
+    #     print(ip2)
+    #     print(udp)
+    # Code for A-stage1,2-----------end
 
-    # TODO Add your implementation
-    # for ttl in range(1, TRACEROUTE_MAX_TTL+1):
-    #     util.print_result([], ttl)
-    # return []
+    msg = "Potato"
+    routers = []
+    for ttl in range(1, TRACEROUTE_MAX_TTL+1):
+        sendsock.set_ttl(ttl)
+        routers_of_ttl = []
+        for _ in range(PROBE_ATTEMPT_COUNT):
+            sendsock.sendto(msg.encode(), (ip, TRACEROUTE_PORT_NUMBER))
+            if recvsock.recv_select():
+                buf, address = recvsock.recvfrom()
+                ip1 = IPv4(buf)
+                icmp = ICMP(buf[ip1.header_len:])
+                if icmp.type == 11 and icmp.code == 0:
+                    if routers_of_ttl.count(ip1.src) == 0:
+                        routers_of_ttl.append(ip1.src)
+                elif icmp.type == 3 and icmp.code == 3:
+                    routers_of_ttl.append(ip1.src)
+                    util.print_result(routers_of_ttl, ttl)
+                    return routers
+        util.print_result(routers_of_ttl, ttl)
+        routers.append(routers_of_ttl)
+    return routers
 
 
 if __name__ == '__main__':
