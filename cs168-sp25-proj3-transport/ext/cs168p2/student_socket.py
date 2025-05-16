@@ -594,13 +594,16 @@ class StudentUSocket(StudentUSocketBase):
       return
     ## Start of Stage 1.2 ##
     if self.state == SYN_SENT:
-      self.handle_synsent(p.tcp)
+      self.handle_synsent(seg)
     ## End of Stage 1.2 ##
     elif self.state in (ESTABLISHED, FIN_WAIT_1, FIN_WAIT_2,
                         CLOSE_WAIT, CLOSING, LAST_ACK, TIME_WAIT):
       if self.acceptable_seg(seg, payload):
         ## Start of Stage 2.1 ##
-        
+        if seg.seq |EQ| self.rcv.nxt:
+          self.handle_accepted_seg(seg, payload)
+        else:
+          self.set_pending_ack()
         ## End of Stage 2.1 ##
         pass
         ## Start of Stage 3.1 ##
@@ -686,7 +689,10 @@ class StudentUSocket(StudentUSocketBase):
       payload = payload[:rcv.wnd] # Chop to size!
 
     ## Start of Stage 2.3 ##
-
+    rcv.nxt = rcv.nxt |PLUS| len(payload)
+    rcv.wnd = rcv.wnd |MINUS| len(payload)
+    self.rx_data += payload
+    self.set_pending_ack()
     ## End of Stage 2.3 ##
 
   def update_window(self, seg):
@@ -813,7 +819,8 @@ class StudentUSocket(StudentUSocketBase):
       return
 
     ## Start of Stage 2.2 ##
-
+    if self.state in [ESTABLISHED, FIN_WAIT_1, FIN_WAIT_2] and len(payload):
+      self.handle_accepted_payload(payload)
     ## End of Stage 2.2 ##
 
     # eight, check FIN bit
