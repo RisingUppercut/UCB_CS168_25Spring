@@ -600,15 +600,25 @@ class StudentUSocket(StudentUSocketBase):
                         CLOSE_WAIT, CLOSING, LAST_ACK, TIME_WAIT):
       if self.acceptable_seg(seg, payload):
         ## Start of Stage 2.1 ##
-        if seg.seq |EQ| self.rcv.nxt:
-          self.handle_accepted_seg(seg, payload)
-        else:
-          self.set_pending_ack()
+        # if seg.seq |EQ| self.rcv.nxt:
+        #   self.handle_accepted_seg(seg, payload)
+        # else:
+        #   self.set_pending_ack()
         ## End of Stage 2.1 ##
         pass
         ## Start of Stage 3.1 ##
         # you may need to remove Stage 2's code.
-
+        self.rx_queue.push(p)
+        while not self.rx_queue.empty():
+          s, p = self.rx_queue.peek() 
+          if s |GT| self.rcv.nxt:
+            self.set_pending_ack()
+            break
+          else:
+            s, p = self.rx_queue.pop()
+            payload = p.tcp.payload
+            payload = payload[self.rcv.nxt - s:]
+            self.handle_accepted_seg(p.tcp, payload)
         ## End of Stage 3.1 ##
       else:
         self.set_pending_ack()
