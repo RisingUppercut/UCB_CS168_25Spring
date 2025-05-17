@@ -609,16 +609,6 @@ class StudentUSocket(StudentUSocketBase):
         ## Start of Stage 3.1 ##
         # you may need to remove Stage 2's code.
         self.rx_queue.push(p)
-        while not self.rx_queue.empty():
-          s, p = self.rx_queue.peek() 
-          if s |GT| self.rcv.nxt:
-            self.set_pending_ack()
-            break
-          else:
-            s, p = self.rx_queue.pop()
-            payload = p.tcp.payload
-            payload = payload[self.rcv.nxt - s:]
-            self.handle_accepted_seg(p.tcp, payload)
         ## End of Stage 3.1 ##
       else:
         self.set_pending_ack()
@@ -627,7 +617,15 @@ class StudentUSocket(StudentUSocketBase):
     ## Start of Stage 3.2 ##
     # checking recv queue
     # Hint: data = packet.app[self.rcv.nxt |MINUS| packet.tcp.seq:]
-
+    while not self.rx_queue.empty():
+      s, p = self.rx_queue.peek() 
+      if s |GT| self.rcv.nxt:
+        self.set_pending_ack()
+        break
+      else:
+        s, p = self.rx_queue.pop()
+        data = p.app[self.rcv.nxt |MINUS| s:]
+        self.handle_accepted_seg(p.tcp, data)
     ## End of Stage 3.2 ##
 
     self.maybe_send()
