@@ -15,7 +15,6 @@ from socket import SHUT_RD, SHUT_WR, SHUT_RDWR
 import random
 import inspect
 import functools
-
 """
 Partially implements following RFCs:
 
@@ -661,7 +660,7 @@ class StudentUSocket(StudentUSocketBase):
     if acceptable_ack:
       ## Start of Stage 1.3 ##
       self.rcv.nxt = seg.seq |PLUS| 1
-      self.snd.una = self.snd.una |PLUS| 1
+      self.snd.una = seg.ack
       if self.snd.una |GT| self.snd.iss:
         self.snd.nxt = seg.ack
         self.state = ESTABLISHED
@@ -698,7 +697,7 @@ class StudentUSocket(StudentUSocketBase):
 
     ## Start of Stage 2.3 ##
     rcv.nxt = rcv.nxt |PLUS| len(payload)
-    rcv.wnd = rcv.wnd |MINUS| len(payload)
+    rcv.wnd -= len(payload)
     self.rx_data += payload
     self.set_pending_ack()
     ## End of Stage 2.3 ##
@@ -712,7 +711,7 @@ class StudentUSocket(StudentUSocketBase):
     """
 
     ## Start of Stage 5.1 ##
-    self.snd.wnd = self.TX_DATA_MAX # remove when implemented
+    self.snd.wnd = seg.win
     self.snd.wl1 = seg.seq
     self.snd.wl2 = seg.ack
 
@@ -764,7 +763,7 @@ class StudentUSocket(StudentUSocketBase):
     ## Start of Stage 7.2 ##
 
     ## End of Stage 7.2 ##
-
+  
   def check_ack(self, seg):
     """
     seg is a TCP segment
@@ -779,7 +778,7 @@ class StudentUSocket(StudentUSocketBase):
     # fifth, check ACK field
     if self.state in (ESTABLISHED, FIN_WAIT_1, FIN_WAIT_2, CLOSE_WAIT, CLOSING):
       ## Start of Stage 4.1 ##
-      if seg.ack |GE| snd.una and (seg.ack |LT| (snd.una |PLUS| snd.wnd)):
+      if (seg.ack |GE| snd.una) and (seg.ack |LE| snd.nxt):
         self.handle_accepted_ack(seg)
       elif seg.ack |LT| snd.una:
         continue_after_ack = False
@@ -822,7 +821,6 @@ class StudentUSocket(StudentUSocketBase):
     """
     snd = self.snd
     rcv = self.rcv
-
     assert not seg.SYN
     if not seg.ACK:
       return
@@ -913,7 +911,7 @@ class StudentUSocket(StudentUSocketBase):
     """
     if not self.ack_pending:
       return
-
+  
     self.ack_pending = False
     self.tx(self.new_packet())
 
