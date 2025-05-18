@@ -563,11 +563,12 @@ class StudentUSocket(StudentUSocketBase):
 
 
     if (p.tcp.SYN or p.tcp.FIN or p.tcp.payload) and not retxed:
-
+      p.tx_ts = self.stack.now
+      self.retx_queue.push(p)
       ## Start of Stage 4.4 ##
       self.snd.nxt = self.snd.nxt |PLUS| len(p.tcp.payload)
       ## End of Stage 4.4 ##
-      pass
+     
 
     ## End of Stage 8.1 ##
     
@@ -672,12 +673,22 @@ class StudentUSocket(StudentUSocketBase):
   def update_rto(self, acked_pkt):
     """
     acked_pkt is an IP packet
-
+    
     Updates the rto based on rfc 6298.
     """
 
     ## Start of Stage 9.1 ##
-
+    R = self.stack.now - acked_pkt.tx_ts
+    if self.srtt == 0:
+      self.srtt = R
+      self.rttvar = R / 2
+      self.rto = self.srtt + max(self.G, self.K * self.rttvar)
+    else:
+      self.rttvar = (1-self.beta) * self.rttvar + self.beta * abs(self.srtt - R)
+      self.srtt = (1-self.alpha) * self.srtt + self.alpha * R
+      self.rto = self.srtt + max(self.G, self.K * self.rttvar)
+    self.rto = min(self.rto, self.MAX_RTO)
+    self.rto = max(self.rto, self.MIN_RTO)
     ## End of Stage 9.1 ##
 
     pass
@@ -731,13 +742,12 @@ class StudentUSocket(StudentUSocketBase):
 
 
     ## Start of Stage 8.2 ##
-
+    acked_pkts = self.retx_queue.pop_upto(seg.ack)
     ## End of Stage 8.2 ##
 
 
     ## Start of Stage 9.2 ##
 
-    acked_pkts = [] # remove when implemented
     for (ackno, p) in acked_pkts:
       if not p.retxed:
         self.update_rto(p)
@@ -904,7 +914,11 @@ class StudentUSocket(StudentUSocketBase):
     """
 
     ## Start of Stage 8.3 ##
-    time_in_queue = 0 # modify when implemented
+    time_in_queue = 0
+    if not self.retx_queue.empty():
+      p = self.retx_queue.get_earliest_pkt()[1]
+      time_in_queue = self.stack.now - p.tx_ts
+    
 
     ## End of Stage 8.3 ##
 
@@ -913,7 +927,8 @@ class StudentUSocket(StudentUSocketBase):
       self.tx(p, retxed=True)
 
       ## Start of Stage 9.3 ##
-
+      self.rto = self.rto * 2
+      self.rto = min(self.rto, self.MAX_RTO)
       ## End of Stage 9.3 ##
 
   def set_pending_ack(self):
